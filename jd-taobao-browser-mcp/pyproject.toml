@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "jd-taobao-browser-mcp"
+version = "0.1.0"
+description = "A human-in-the-loop MCP server for browsing JD.com and Taobao/Tmall with Playwright."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+  "mcp[cli]>=1.27,<2",
+  "playwright>=1.54,<2",
+  "python-dotenv>=1.0,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0,<9",
+  "pytest-asyncio>=0.24,<1",
+]
+
+[project.scripts]
+jd-taobao-browser-mcp = "server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["jd_taobao_mcp"]
+include = ["server.py"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

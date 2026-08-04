@@ -1,0 +1,17 @@
+# 将路径替换为你本机的绝对路径。Windows TOML 路径建议使用正斜杠。
+[mcp_servers.jd_taobao_browser]
+command = "C:/Users/俞昊楠/Desktop/jd-taobao-browser-mcp/.venv/Scripts/python.exe"
+args = ["C:/Users/俞昊楠/Desktop/jd-taobao-browser-mcp/server.py"]
+cwd = "C:/Users/俞昊楠/Desktop/jd-taobao-browser-mcp"
+enabled = true
+required = false
+startup_timeout_sec = 30
+tool_timeout_sec = 120
+default_tools_approval_mode = "prompt"
+
+[mcp_servers.jd_taobao_browser.env]
+PLAYWRIGHT_HEADLESS = "false"
+ALLOW_STATE_CHANGING_ACTIONS = "false"
+PLAYWRIGHT_BROWSERS_PATH = ".ms-playwright"
+BROWSER_PROFILE_DIR = ".tmp/browser-profile"
+ARTIFACTS_DIR = "artifacts"

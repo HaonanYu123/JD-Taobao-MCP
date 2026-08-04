@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "jd-taobao-browser": {
+      "command": "C:\\Users\\俞昊楠\\Desktop\\jd-taobao-browser-mcp\\.venv\\Scripts\\python.exe",
+      "args": [
+        "C:\\Users\\俞昊楠\\Desktop\\jd-taobao-browser-mcp\\server.py"
+      ],
+      "env": {
+        "PLAYWRIGHT_HEADLESS": "false",
+        "ALLOW_STATE_CHANGING_ACTIONS": "false",
+        "PLAYWRIGHT_BROWSERS_PATH": ".ms-playwright",
+        "BROWSER_PROFILE_DIR": ".tmp/browser-profile",
+        "ARTIFACTS_DIR": "artifacts"
+      }
+    }
+  }
+}
