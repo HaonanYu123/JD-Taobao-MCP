@@ -6,9 +6,10 @@
 
 - 打开京东/淘宝登录页，用户自己扫码、输入验证码或完成安全验证。
 - 复用独立浏览器资料目录中的登录状态。
-- 搜索商品，返回标题、价格、店铺、评论文本、链接和图片；默认 `include_details=true`，会逐个打开结果商品页补齐硬约束字段。
-- 打开商品详情，提取标题、价格、店铺、规格、图片、产品参数、最多 5 条好评、最多 5 条差评、Meta、JSON-LD 和页面文本摘要。
-- 商品详情硬约束：输出必须包含 `product_parameters`、`good_reviews`、`bad_reviews`、`product_parameters_status`、`good_reviews_status`、`bad_reviews_status`。页面没有展示、评价不足、要求人工验证或提取失败时，字段仍返回空数组或不足 5 条，并在对应 `status.reason` 说明原因。
+- 搜索商品，返回标题、价格、店铺、评论文本、商品链接和图片；默认 `include_details=true`，会逐个打开结果商品页补齐硬约束字段。
+- 京东和淘宝使用独立浏览器资料目录，减少登录态、搜索模式和浏览器可执行文件设置互相影响。
+- 打开商品详情，提取标题、价格、店铺、规格、图片、产品链接、产品参数、最多 5 条好评、最多 2 条差评、Meta、JSON-LD 和页面文本摘要。
+- 商品详情硬约束：输出必须包含 `product_url`、`product_parameters`、`good_reviews`、`bad_reviews`、`product_parameters_status`、`good_reviews_status`、`bad_reviews_status`。页面没有展示、评价不足、要求人工验证或提取失败时，字段仍返回空数组或不足目标条数，并在对应 `status.reason` 说明原因。
 - 通用浏览器操作：打开 URL、列出可点击元素、点击、普通输入、滚动、返回、截图。
 - 仅允许京东、淘宝、天猫域名。
 
@@ -92,7 +93,7 @@ tool_timeout_sec = 120
 
 ## 首次使用流程
 
-1. 调用 `browser_start()`。
+1. 调用 `browser_start()`。该工具会启动默认淘宝浏览器；京东浏览器会在打开京东登录页、京东 URL 或京东搜索时按需启动。
 2. 调用 `open_login(platform="jd")` 或 `open_login(platform="taobao")`。
 3. 在弹出的浏览器中自行扫码或登录；如出现滑块、验证码，手动完成。
 4. 调用 `check_login(platform="...")`。
@@ -112,13 +113,13 @@ tool_timeout_sec = 120
 
 | 工具 | 作用 |
 |---|---|
-| `browser_start` | 启动浏览器 |
-| `browser_status` | 查看运行状态 |
+| `browser_start` | 启动默认淘宝浏览器 |
+| `browser_status` | 查看京东和淘宝浏览器运行状态 |
 | `open_login` | 打开京东/淘宝登录页 |
 | `check_login` | 估计是否已登录，不返回 Cookie 值 |
 | `open_url` | 打开允许域名 URL |
-| `search_products` | 搜索商品并结构化提取；默认补商品参数、好评、差评硬约束字段 |
-| `get_product_detail` | 提取商品详情，硬约束包含产品参数、最多 5 条好评、最多 5 条差评及 status |
+| `search_products` | 搜索商品并结构化提取；默认补 `product_url`、商品参数、好评、差评硬约束字段 |
+| `get_product_detail` | 提取商品详情，硬约束包含 `product_url`、产品参数、最多 5 条好评、最多 2 条差评及 status |
 | `page_snapshot` | 获取当前页面可见文本、链接和表单 |
 | `extract_current_page` | 快照 + 商品字段综合提取 |
 | `list_page_elements` | 给当前可交互元素分配 `e1`、`e2` 等 ref |
@@ -135,7 +136,11 @@ tool_timeout_sec = 120
 
 - `PLAYWRIGHT_HEADLESS=false`：保持可见浏览器，便于人工登录与验证。
 - `BROWSER_CHANNEL=msedge`：可选，使用本机 Edge；留空使用 Playwright Chromium。
-- `BROWSER_PROFILE_DIR`：独立登录资料目录。
+- `BROWSER_EXECUTABLE_PATH`：可选，指定通用 Chromium/Chrome/Edge 可执行文件路径。
+- `JD_BROWSER_EXECUTABLE_PATH`：可选，仅京东使用的浏览器可执行文件路径。
+- `TAOBAO_BROWSER_EXECUTABLE_PATH`：可选，仅淘宝/天猫使用的浏览器可执行文件路径；未设置时会优先尝试本机 Chrome，再回退到通用配置。
+- `TAOBAO_SEARCH_MODE=mobile`：淘宝搜索默认走移动端搜索页；也可设为 `pc` 使用桌面搜索页。
+- `BROWSER_PROFILE_DIR`：独立登录资料根目录；程序会在下面分别创建 `jd` 和 `taobao` 子目录。
 - `PROXY=http://127.0.0.1:7897`：可选代理。
 - `MAX_SEARCH_RESULTS=30`：单次最大结果数。
 - `ALLOW_STATE_CHANGING_ACTIONS=false`：保持只读防护。
