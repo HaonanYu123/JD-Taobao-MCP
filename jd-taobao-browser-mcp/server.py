@@ -31,8 +31,9 @@ mcp = FastMCP(
         "必须让用户自己完成扫码、密码、验证码和安全验证。"
         "默认只读：不得购买、加入购物车、结算、支付、关注、收藏、删除或修改账户信息。"
         "优先使用 search_products 和 get_product_detail；只有页面结构变化时才使用通用点击工具。"
-        "商品详情输出有硬约束：必须包含 product_parameters、good_reviews、bad_reviews "
-        "及对应 status 字段；缺失或不足时必须用空数组和 status.reason 说明原因。"
+        "商品详情输出有硬约束：必须包含 product_url、product_parameters、good_reviews、bad_reviews "
+        "及对应 status 字段；good_reviews 目标最多 5 条，bad_reviews 目标最多 2 条；"
+        "缺失或不足时必须用空数组或不足目标条数和 status.reason 说明原因。"
         "不要高频、大规模采集。元素 ref 在页面变化后会失效，点击或导航后应重新调用 list_page_elements。"
     ),
 )
@@ -41,13 +42,16 @@ mcp = FastMCP(
 @mcp.tool()
 async def browser_start() -> dict[str, Any]:
     """启动一个带独立持久化资料目录的可见 Chromium 浏览器。"""
-    return await service.browser.start()
+    return await service.taobao_browser.start()
 
 
 @mcp.tool()
 async def browser_status() -> dict[str, Any]:
     """查看浏览器是否运行、当前页面和资料目录。"""
-    return await service.browser.status()
+    return {
+        "jd": await service.jd_browser.status(),
+        "taobao": await service.taobao_browser.status(),
+    }
 
 
 @mcp.tool()
@@ -57,7 +61,8 @@ async def open_login(platform: str) -> dict[str, Any]:
     Args:
         platform: jd 或 taobao。
     """
-    return await service.browser.open_login(platform)
+    platform = platform.strip().lower()
+    return await service._browser_for_platform(platform).open_login(platform)
 
 
 @mcp.tool()
@@ -67,13 +72,17 @@ async def check_login(platform: str) -> dict[str, Any]:
     Args:
         platform: jd 或 taobao。
     """
-    return await service.browser.check_login(platform)
+    platform = platform.strip().lower()
+    return await service._browser_for_platform(platform).check_login(platform)
 
 
 @mcp.tool()
 async def open_url(url: str) -> dict[str, Any]:
     """打开京东、淘宝或天猫 URL。其他域名会被拒绝。"""
-    return await service.browser.navigate(url)
+    from jd_taobao_mcp.service import platform_from_url
+
+    platform = platform_from_url(url)
+    return await service._browser_for_platform(platform).navigate(url)
 
 
 @mcp.tool()
@@ -96,7 +105,7 @@ async def search_products(
         max_price: 可选最高价格，本地过滤。
         sort: default、price_asc 或 price_desc；排序在提取结果上本地完成。
         include_details: 默认 true。逐个打开结果商品页，并强制每个商品返回
-            product_parameters、good_reviews、bad_reviews 及对应 status 字段。
+            product_url、product_parameters、最多 5 条 good_reviews、最多 2 条 bad_reviews 及对应 status 字段。
     """
     return await service.search_products(
         platform=platform,
@@ -111,7 +120,7 @@ async def search_products(
 
 @mcp.tool()
 async def get_product_detail(url: str) -> dict[str, Any]:
-    """打开商品页并提取详情；硬约束返回产品参数、最多 5 条好评、最多 5 条差评及 status。"""
+    """打开商品页并提取详情；硬约束返回产品链接、产品参数、最多 5 条好评、最多 2 条差评及 status。"""
     return await service.get_product_detail(url)
 
 
@@ -174,7 +183,11 @@ async def take_screenshot(full_page: bool = False) -> dict[str, Any]:
 @mcp.tool()
 async def browser_close() -> dict[str, Any]:
     """关闭浏览器；持久化登录资料仍保留在本地独立目录。"""
-    return await service.browser.close()
+    results = {
+        "jd": await service.jd_browser.close(),
+        "taobao": await service.taobao_browser.close(),
+    }
+    return {"success": True, "results": results}
 
 
 def main() -> None:

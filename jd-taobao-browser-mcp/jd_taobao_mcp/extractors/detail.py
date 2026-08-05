@@ -76,6 +76,41 @@ async def extract_product_detail(page: Page, platform: str) -> dict[str, Any]:
             }
             if (productParameters.length >= 100) break;
           }
+          const detailParameters = [];
+          const detailParameterSeen = new Set();
+          const addDetailParameter = (name, value, group = '商品详情') => {
+            name = clean(name, 120).replace(/[：:]\s*$/, '');
+            value = clean(value, 500);
+            group = clean(group, 120) || '商品详情';
+            if (!name || !value || name === value) return;
+            const key = `${group}\u0000${name}\u0000${value}`;
+            if (detailParameterSeen.has(key)) return;
+            detailParameterSeen.add(key);
+            detailParameters.push({name, value, group});
+          };
+          const detailRoots = [
+            ...document.querySelectorAll('#detail, #J-detail, .detail, .goods-detail, [class*="detail"], [class*="Detail"]')
+          ];
+          const rootSeen = new Set();
+          for (const root of detailRoots) {
+            if (!root || rootSeen.has(root)) continue;
+            rootSeen.add(root);
+            const rootText = clean(root.innerText || root.textContent || '', 3000);
+            if (!rootText.includes('商品详情') && !root.querySelector('.Ptable, .Ptable-item, .p-parameter-list, .parameter2')) continue;
+            for (const section of root.querySelectorAll('.Ptable-item, .Ptable, .p-parameter, .parameter2, .p-parameter-list')) {
+              const group = clean(section.querySelector('h3, h4, .Ptable-tit')?.innerText || '商品详情');
+              for (const row of section.querySelectorAll('dl, tr, li')) {
+                const name = clean(row.querySelector('dt, th, .name, [class*="name"]')?.innerText || '');
+                const value = clean(row.querySelector('dd, td, .value, [class*="value"]')?.innerText || '');
+                if (name && value) addDetailParameter(name, value, group);
+                const pair = splitParameterText(row.innerText || '');
+                if (pair) addDetailParameter(pair[0], pair[1], group);
+                if (detailParameters.length >= 100) break;
+              }
+              if (detailParameters.length >= 100) break;
+            }
+            if (detailParameters.length >= 100) break;
+          }
           const textOf = (root, selectorList) => {
             for (const selector of selectorList) {
               const el = root.querySelector(selector);
@@ -96,8 +131,17 @@ async def extract_product_detail(page: Page, platform: str) -> dict[str, Any]:
             }
             return null;
           };
-          const positiveTerms = ['好用', '满意', '推荐', '不错', '很好', '超香', '方便', '简单', '值得', '性价比', '喜欢', '大品牌', '香甜', '粒粒分明'];
-          const negativeTerms = ['不满意', '不好用', '差评', '很差', '垃圾', '失望', '后悔', '退货', '坏了', '破损', '异味', '夹生', '粘锅', '溢锅', '太慢', '噪音', '漏水', '不推荐'];
+          const positiveTerms = ['好用', '满意', '推荐', '不错', '很好', '超香', '方便', '简单', '值得', '性价比', '喜欢', '大品牌', '香甜', '粒粒分明', '完美', '省心', '治愈', '强烈推荐', '闭眼冲', '稳定', '灵敏', '流畅', '可爱', '实用'];
+          const negativeTerms = ['不满意', '不好用', '差评', '很差', '垃圾', '失望', '退货', '坏了', '破损', '有异味', '夹生饭', '溢锅', '太慢了', '噪音大', '漏水', '不推荐', '难用', '踩雷', '虚假', '欺骗', '套路'];
+          const negationPhrases = ['后悔没有早点', '没有异味', '无异味', '不粘锅', '不夹生', '噪音小', '噪音低', '不费力'];
+          const isTrulyNegative = (text, term) => {
+            const index = text.indexOf(term);
+            if (index < 0) return false;
+            if (negationPhrases.some((phrase) => text.includes(phrase))) return false;
+            const before = text.slice(Math.max(0, index - 3), index);
+            if (/[没无非少小零]$/.test(before)) return false;
+            return true;
+          };
           const reviewNodes = [];
           const reviewNodeSeen = new Set();
           for (const selector of selectors.review_items) {
@@ -124,7 +168,7 @@ async def extract_product_detail(page: Page, platform: str) -> dict[str, Any]:
             if (reviewSeen.has(key)) continue;
             reviewSeen.add(key);
             const positive = positiveTerms.some((term) => content.includes(term));
-            const negative = negativeTerms.some((term) => content.includes(term));
+            const negative = negativeTerms.some((term) => isTrulyNegative(content, term));
             reviews.push({
               user: clean(user, 80),
               content,
@@ -142,7 +186,7 @@ async def extract_product_detail(page: Page, platform: str) -> dict[str, Any]:
           const highDissatisfiedReviews = reviews
             .filter((review) => review.sentiment === 'negative')
             .sort(reviewSort)
-            .slice(0, 5);
+            .slice(0, 2);
           const images = [];
           const ogImage = document.querySelector('meta[property="og:image"]')?.content;
           if (ogImage) images.push(ogImage);
@@ -162,6 +206,7 @@ async def extract_product_detail(page: Page, platform: str) -> dict[str, Any]:
             sales_text: firstText(selectors.sales),
             specs,
             product_parameters: productParameters,
+            detail_product_parameters: detailParameters,
             high_praise_reviews: highPraiseReviews,
             high_dissatisfied_reviews: highDissatisfiedReviews,
             images,
@@ -222,21 +267,33 @@ async def extract_product_detail(page: Page, platform: str) -> dict[str, Any]:
             break
 
     body_text = raw.get("body_text") or ""
-    product_parameters = _normalize_parameters(raw.get("product_parameters", []))
+    if platform == "taobao":
+        product_parameters = _merge_parameters(
+            _taobao_parameters_from_text(body_text),
+            _normalize_parameters(raw.get("product_parameters", [])),
+            _normalize_parameters(raw.get("detail_product_parameters", [])),
+        )
+    else:
+        product_parameters = _merge_parameters(
+            _parameters_from_detail_text(body_text),
+            _normalize_parameters(raw.get("detail_product_parameters", [])),
+            _normalize_parameters(raw.get("product_parameters", [])),
+        )
     if not product_parameters:
         product_parameters = _fallback_parameters_from_text(body_text)
-    high_praise_reviews = _normalize_reviews(raw.get("high_praise_reviews", []))
+    high_praise_reviews = _normalize_reviews(raw.get("high_praise_reviews", []), limit=5)
     high_dissatisfied_reviews = _normalize_reviews(
-        raw.get("high_dissatisfied_reviews", [])
+        raw.get("high_dissatisfied_reviews", []), limit=2
     )
     if not high_praise_reviews:
-        high_praise_reviews = _fallback_reviews_from_text(body_text, positive=True)
+        high_praise_reviews = _fallback_reviews_from_text(body_text, positive=True, limit=5)
     if not high_dissatisfied_reviews:
-        high_dissatisfied_reviews = _fallback_reviews_from_text(body_text, positive=False)
+        high_dissatisfied_reviews = _fallback_reviews_from_text(body_text, positive=False, limit=2)
 
     return {
         "platform": platform,
         "url": page.url,
+        "product_url": page.url,
         "title": title,
         "price": parse_price(price_text),
         "price_text": price_text,
@@ -316,7 +373,7 @@ def _normalize_parameters(items: list[Any]) -> list[dict[str, str]]:
     return output
 
 
-def _normalize_reviews(items: list[Any]) -> list[dict[str, Any]]:
+def _normalize_reviews(items: list[Any], *, limit: int = 5) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     for item in items:
@@ -342,7 +399,213 @@ def _normalize_reviews(items: list[Any]) -> list[dict[str, Any]]:
                 "variant": compact_text(str(item.get("variant") or ""), 160),
             }
         )
-        if len(output) >= 5:
+        if len(output) >= limit:
+            break
+    return output
+
+
+def _merge_parameters(*sources: list[dict[str, str]]) -> list[dict[str, str]]:
+    output: list[dict[str, str]] = []
+    seen_names: set[str] = set()
+    seen_pairs: set[tuple[str, str, str]] = set()
+    for source in sources:
+        for item in source:
+            name = compact_text(item.get("name"), 120)
+            value = compact_text(item.get("value"), 500)
+            group = compact_text(item.get("group"), 120) or "商品详情"
+            if not name or not value:
+                continue
+            key = (group, name, value)
+            if key in seen_pairs or name in seen_names:
+                continue
+            seen_pairs.add(key)
+            seen_names.add(name)
+            output.append({"name": name, "value": value, "group": group})
+            if len(output) >= 80:
+                return output
+    return output
+
+
+def _taobao_parameters_from_text(text: str | None) -> list[dict[str, str]]:
+    text = compact_text(text, 50_000)
+    if not text:
+        return []
+
+    start = _first_existing_index(
+        text,
+        (
+            "\u5546\u54c1\u53c2\u6570",
+            "\u5b9d\u8d1d\u53c2\u6570",
+            "\u89c4\u683c\u53c2\u6570",
+            "\u53c2\u6570\u4fe1\u606f",
+            "\u4ea7\u54c1\u53c2\u6570",
+            "\u53c2\u6570",
+        ),
+        0,
+    )
+    if start == len(text):
+        start = 0
+    end = _first_existing_index(
+        text,
+        (
+            "\u5b9d\u8d1d\u8bc4\u4ef7",
+            "\u7d2f\u8ba1\u8bc4\u4ef7",
+            "\u8bc4\u4ef7",
+            "\u95ee\u5927\u5bb6",
+            "\u5546\u54c1\u8be6\u60c5",
+            "\u52a0\u5165\u8d2d\u7269\u8f66",
+            "\u7acb\u5373\u8d2d\u4e70",
+        ),
+        start + 2,
+    )
+    segment = text[start:end] if end > start else text[start : start + 6000]
+    labels = (
+        "\u54c1\u724c",
+        "\u578b\u53f7",
+        "\u8d27\u53f7",
+        "\u4ea7\u5730",
+        "\u989c\u8272\u5206\u7c7b",
+        "\u529f\u7387",
+        "\u989d\u5b9a\u529f\u7387",
+        "\u989d\u5b9a\u7535\u538b",
+        "\u80fd\u6548\u7b49\u7ea7",
+        "\u63a7\u5236\u65b9\u5f0f",
+        "\u64cd\u63a7\u65b9\u5f0f",
+        "\u9762\u677f\u6750\u8d28",
+        "\u9762\u677f\u7c7b\u578b",
+        "\u7089\u5934",
+        "\u7089\u5934\u6570\u91cf",
+        "\u706b\u529b\u6863\u4f4d",
+        "\u9002\u7528\u9505\u5177",
+        "\u662f\u5426\u914d\u9505",
+        "\u529f\u80fd",
+        "\u5c3a\u5bf8",
+        "\u91cd\u91cf",
+        "\u5305\u88c5\u6e05\u5355",
+        "CCC\u8ba4\u8bc1\u7f16\u53f7",
+        "3C\u8bc1\u4e66\u7f16\u53f7",
+    )
+    positions: list[tuple[int, str, int]] = []
+    for label in labels:
+        for pattern in (
+            rf"(?<!\S){re.escape(label)}(?:\s*[:：]\s*|\s+)",
+            rf"{re.escape(label)}(?:\s*[:：]\s*)",
+        ):
+            match = re.search(pattern, segment)
+            if match:
+                positions.append((match.start(), label, match.end()))
+                break
+    positions.sort(key=lambda item: item[0])
+
+    output: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for index, (_, label, value_start) in enumerate(positions):
+        value_end = positions[index + 1][0] if index + 1 < len(positions) else len(segment)
+        value = compact_text(segment[value_start:value_end], 500)
+        value = re.sub(r"^(?:\u5df2\u9009|\u53c2\u6570|\u5546\u54c1\u53c2\u6570)\s*", "", value)
+        if not value or value in {"-", "\u6682\u65e0", "\u65e0"} or label in seen:
+            continue
+        seen.add(label)
+        output.append(
+            {"name": label, "value": value, "group": "\u6dd8\u5b9d\u53c2\u6570\u4fe1\u606f"}
+        )
+        if len(output) >= 40:
+            break
+    return output
+
+
+_DETAIL_PARAM_LABELS = (
+    "品牌",
+    "商品编号",
+    "店铺",
+    "货号",
+    "型号",
+    "认证型号",
+    "CCC强制性认证",
+    "3C证书编号",
+    "国补备案型号",
+    "能效等级",
+    "能效网规格型号",
+    "重量",
+    "产品净重",
+    "含底座重量",
+    "产品尺寸",
+    "外包装尺寸",
+    "含底座尺寸",
+    "裸机尺寸（不含底座）",
+    "长",
+    "宽",
+    "高",
+    "身高",
+    "类型",
+    "功能",
+    "特色功能",
+    "面板样式",
+    "面板形状",
+    "火力档位",
+    "适用锅具",
+    "是否配锅",
+    "控温方式",
+    "外形外观",
+    "智能生态",
+    "IoT智能生态产品",
+    "是否内置大模型",
+    "是否支持车机联动",
+    "联网方式",
+    "电源方式",
+    "续航时间",
+    "硬件形态",
+    "屏幕尺寸",
+    "适用场景",
+    "包装形式",
+    "内胆材质",
+    "操控方式",
+    "加热方式",
+    "真空度",
+    "最大吸力",
+    "最低噪音",
+    "额定功率",
+    "额定电压",
+    "上市时间",
+    "包装清单",
+)
+
+
+def _parameters_from_detail_text(text: str | None) -> list[dict[str, str]]:
+    text = compact_text(text, 50_000)
+    if not text:
+        return []
+    start = text.find("商品详情 品牌")
+    if start < 0:
+        start = text.find("商品详情 商品编号")
+    if start < 0:
+        start = text.find("商品详情")
+    if start < 0:
+        return []
+    end = _first_existing_index(
+        text,
+        ("又好又便宜", "官方购买", "以旧换新", "售后保障", "温馨提示", "收藏", "加入购物车", "立即购买"),
+        start + len("商品详情"),
+    )
+    segment = text[start:end] if end > start else text[start : start + 5000]
+    positions: list[tuple[int, str, int]] = []
+    for label in _DETAIL_PARAM_LABELS:
+        pattern = rf"(?<!\S){re.escape(label)}(?!\S)"
+        for match in re.finditer(pattern, segment):
+            positions.append((match.start(), label, match.end()))
+            break
+    positions.sort(key=lambda item: item[0])
+
+    output: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for index, (_, label, value_start) in enumerate(positions):
+        value_end = positions[index + 1][0] if index + 1 < len(positions) else len(segment)
+        value = compact_text(segment[value_start:value_end], 500)
+        if not value or value in {"暂无", "无"} or label in seen:
+            continue
+        seen.add(label)
+        output.append({"name": label, "value": value, "group": "商品详情"})
+        if len(output) >= 40:
             break
     return output
 
@@ -404,7 +667,9 @@ def _fallback_parameters_from_text(text: str | None) -> list[dict[str, str]]:
     return output[:20]
 
 
-def _fallback_reviews_from_text(text: str | None, *, positive: bool) -> list[dict[str, Any]]:
+def _fallback_reviews_from_text(
+    text: str | None, *, positive: bool, limit: int = 5
+) -> list[dict[str, Any]]:
     text = compact_text(text, 30_000)
     if not text:
         return []
@@ -462,7 +727,7 @@ def _fallback_reviews_from_text(text: str | None, *, positive: bool) -> list[dic
                 "variant": "",
             }
         )
-        if len(output) >= 5:
+        if len(output) >= limit:
             break
 
     return output

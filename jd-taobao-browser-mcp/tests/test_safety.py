@@ -49,3 +49,4 @@ def test_sensitive_typing_blocked():
 def test_verification_detection():
     assert page_requires_user_verification("请拖动滑块完成安全验证")
     assert not page_requires_user_verification("普通商品详情页面")
+    assert not page_requires_user_verification("LOOIROBOT AI 手机机器人商品详情")

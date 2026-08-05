@@ -35,6 +35,25 @@ async def test_jd_search_extractor():
         assert items[0]["title"] == "测试笔记本"
         assert items[0]["price"] == 6999.0
         assert items[0]["shop"] == "测试京东店"
+        assert items[0]["product_url"] == "https://item.jd.com/123.html"
+        await browser.close()
+
+
+@pytest.mark.asyncio
+async def test_jd_search_extractor_react_chat_link_fallback():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+        await page.set_content(
+            '''
+            <a href="https://chat.jd.com/index.action?entry=jd_search&pid=123456&wname=%E6%B5%8B%E8%AF%95AI%E6%9C%BA%E5%99%A8%E4%BA%BA&seller=%E6%B5%8B%E8%AF%95%E5%BA%97&commentNum=100%2B">客服</a>
+            '''
+        )
+        items = await extract_jd_search(page, 10)
+        assert items[0]["title"] == "测试AI机器人"
+        assert items[0]["url"] == "https://item.jd.com/123456.html"
+        assert items[0]["product_url"] == "https://item.jd.com/123456.html"
+        assert items[0]["shop"] == "测试店"
         await browser.close()
 
 
@@ -91,6 +110,7 @@ async def test_detail_extractor():
         )
         data = await extract_product_detail(page, "jd")
         assert data["title"] == "测试商品"
+        assert data["product_url"].startswith("about:")
         assert data["price"] == 1299.0
         assert {"name": "Capacity", "value": "3L", "group": "Base"} in data["product_parameters"]
         assert data["high_praise_reviews"][0]["user"] == "u-positive"

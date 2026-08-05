@@ -58,7 +58,15 @@ _SENSITIVE_INPUT_RE = re.compile(
 )
 
 _VERIFICATION_RE = re.compile(
-    r"滑块|安全验证|异常访问|访问过于频繁|请完成验证|请先验证|输入验证码|获取验证码|验证码错误|robot|captcha",
+    r"滑块|安全验证|异常访问|访问过于频繁|请完成验证|请先验证|输入验证码|获取验证码|验证码错误|captcha|人机验证|拖动.*验证",
+    re.I,
+)
+
+
+_VERIFICATION_RE = re.compile(
+    r"滑块|安全验证|异常访问|访问过于频繁|请完成验证|请先验证|"
+    r"拖动下方滑块|拖动到最右边|验证失败|点击框体重试|"
+    r"captcha|人机验证|drag.*verify|verification failed",
     re.I,
 )
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from playwright.async_api import (
@@ -66,6 +67,10 @@ class BrowserController:
         }
         if self.settings.browser_channel:
             launch_options["channel"] = self.settings.browser_channel
+        executable_path = self.settings.browser_executable_path or _default_edge_path()
+        if executable_path:
+            launch_options.pop("channel", None)
+            launch_options["executable_path"] = str(executable_path)
         if self.settings.proxy:
             launch_options["proxy"] = {"server": self.settings.proxy}
         try:
@@ -73,7 +78,13 @@ class BrowserController:
                 str(self.settings.profile_dir), **launch_options
             )
         except Exception:
-            if self.settings.browser_channel:
+            if "executable_path" in launch_options and self.settings.browser_channel:
+                launch_options.pop("executable_path", None)
+                launch_options["channel"] = self.settings.browser_channel
+                self._context = await self._playwright.chromium.launch_persistent_context(
+                    str(self.settings.profile_dir), **launch_options
+                )
+            elif self.settings.browser_channel:
                 launch_options.pop("channel", None)
                 self._context = await self._playwright.chromium.launch_persistent_context(
                     str(self.settings.profile_dir), **launch_options
@@ -462,3 +473,11 @@ class BrowserController:
 
 def _escape_css_value(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _default_edge_path() -> Path | None:
+    candidates = (
+        Path("C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"),
+        Path("C:/Program Files/Microsoft/Edge/Application/msedge.exe"),
+    )
+    return next((path for path in candidates if path.exists()), None)

@@ -23,10 +23,19 @@ def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(value, maximum))
 
 
+def _env_path(name: str) -> Path | None:
+    raw = os.getenv(name, "").strip()
+    return Path(raw).expanduser() if raw else None
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     headless: bool
     browser_channel: str | None
+    browser_executable_path: Path | None
+    jd_browser_executable_path: Path | None
+    taobao_browser_executable_path: Path | None
+    taobao_search_mode: str
     profile_dir: Path
     artifacts_dir: Path
     navigation_timeout_ms: int
@@ -41,6 +50,15 @@ class Settings:
     @classmethod
     def from_env(cls) -> "Settings":
         channel = os.getenv("BROWSER_CHANNEL", "").strip() or None
+        executable_path_raw = os.getenv("BROWSER_EXECUTABLE_PATH", "").strip()
+        executable_path = (
+            Path(executable_path_raw).expanduser() if executable_path_raw else None
+        )
+        jd_executable_path = _env_path("JD_BROWSER_EXECUTABLE_PATH")
+        taobao_executable_path = _env_path("TAOBAO_BROWSER_EXECUTABLE_PATH")
+        taobao_search_mode = os.getenv("TAOBAO_SEARCH_MODE", "mobile").strip().lower()
+        if taobao_search_mode not in {"mobile", "pc"}:
+            taobao_search_mode = "mobile"
         proxy = os.getenv("PROXY", "").strip() or None
         profile_dir = Path(
             os.getenv(
@@ -58,6 +76,10 @@ class Settings:
         return cls(
             headless=_env_bool("PLAYWRIGHT_HEADLESS", False),
             browser_channel=channel,
+            browser_executable_path=executable_path,
+            jd_browser_executable_path=jd_executable_path,
+            taobao_browser_executable_path=taobao_executable_path,
+            taobao_search_mode=taobao_search_mode,
             profile_dir=profile_dir,
             artifacts_dir=artifacts_dir,
             navigation_timeout_ms=_env_int(
